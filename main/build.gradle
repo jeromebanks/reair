@@ -9,7 +9,10 @@ description = 'Airbnb ReAir Main'
 dependencies {
   compile project(':airbnb-reair-hive-hooks')
   compile project(':airbnb-reair-thrift')
-  compile(group: 'org.apache.hive', name: 'hive-metastore', version:'0.13.1-cdh5.3.3') {
+  compile(group: 'org.apache.hive', name: 'hive-metastore', version:'1.1.0-cdh5.7.1') {
+    exclude(module: '*')
+  }
+  compile(group: 'org.apache.hive', name: 'hive-common', version:'1.1.0-cdh5.7.1') {
     exclude(module: '*')
   }
   compile(group: 'org.apache.thrift', name: 'libthrift', version:'0.9.1') {
@@ -23,14 +26,14 @@ dependencies {
   provided(group: 'commons-cli', name: 'commons-cli', version:'1.2')
   provided(group: 'mysql', name: 'mysql-connector-java', version:'5.1.17')
   provided(group: 'org.apache.commons', name: 'commons-lang3', version:'3.4')
-  provided(group: 'org.apache.hadoop', name: 'hadoop-common', version:'2.5.0-cdh5.3.3')
-  provided(group: 'org.apache.hadoop', name: 'hadoop-distcp', version:'2.5.0-cdh5.3.3')
-  provided(group: 'org.apache.hadoop', name: 'hadoop-mapreduce-client-core', version:'2.5.0-cdh5.3.3')
-  provided(group: 'org.apache.hadoop', name: 'hadoop-mapreduce-client-jobclient', version:'2.5.0-cdh5.3.3')
+  provided(group: 'org.apache.hadoop', name: 'hadoop-common', version:'2.6.0-cdh5.10.1')
+  provided(group: 'org.apache.hadoop', name: 'hadoop-distcp', version:'2.6.0-cdh5.10.1')
+  provided(group: 'org.apache.hadoop', name: 'hadoop-mapreduce-client-core', version:'2.6.0-cdh5.10.1')
+  provided(group: 'org.apache.hadoop', name: 'hadoop-mapreduce-client-jobclient', version:'2.6.0-cdh5.10.1')
   testCompile(group: 'junit', name: 'junit', version:'4.11')
   testCompile(group: 'mysql', name: 'mysql-connector-mxj', version:'5.0.12')
   testCompile(group: 'org.apache.hadoop', name: 'hadoop-minicluster', version:'2.5.0')
-  testCompile(group: 'org.apache.hive', name: 'hive-exec', version:'0.13.1-cdh5.3.3')
+  testCompile(group: 'org.apache.hive', name: 'hive-exec', version:'1.1.0-cdh5.7.1')
   testCompile(group: 'org.mockito', name: 'mockito-core', version:'1.9.5')
   // Hack to make sure that guava 15 comes first on the classpath during the testing phase. Needed
   // to resolve the diamond dependency between guava 15 and guava 18. Once
