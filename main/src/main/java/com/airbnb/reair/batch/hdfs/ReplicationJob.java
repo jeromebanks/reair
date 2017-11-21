@@ -361,9 +361,8 @@ public class ReplicationJob extends Configured implements Tool {
               new SimpleFileStatus(fields[2], Long.valueOf(fields[3]), Long.valueOf(fields[4]));
           Path dstFile = new Path(dstRoot, fields[0]);
 
-          FileSystem srcFs = (new Path(fileStatus.getFullPath()))
-                  .getFileSystem(context.getConfiguration());
-          FileSystem dstFs = dstFile.getFileSystem(context.getConfiguration());
+          FileSystem srcFs = FsUtils.srcFilesystem(context.getConfiguration() );
+          FileSystem dstFs = FsUtils.destFilesystem(context.getConfiguration());
           String copyError =
               BatchUtils.doCopyFileAction(context.getConfiguration(), fileStatus,
                   srcFs, dstFile.getParent().toString(),
