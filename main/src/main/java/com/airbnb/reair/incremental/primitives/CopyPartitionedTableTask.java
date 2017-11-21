@@ -88,7 +88,6 @@ public class CopyPartitionedTableTask implements ReplicationTask {
 
     // Check the table that exists already in the destination cluster
     Table existingTable = destMs.getTable(spec.getDbName(), spec.getTableName());
-    existingTable.setTableType("EXTERNAL");
 
     Table destTable =
         objectModifier.createDestTable(srcCluster, destCluster, freshSrcTable, existingTable);
@@ -131,6 +130,7 @@ public class CopyPartitionedTableTask implements ReplicationTask {
         LOG.debug("Creating " + spec + " since it does not exist on " + "the destination");
         ReplicationUtils.createDbIfNecessary(srcMs, destMs, destTable.getDbName());
         LOG.debug("Creating: " + destTable);
+        destTable.setTableType("EXTERNAL");
         destMs.createTable(destTable);
         LOG.debug("Successfully created table " + spec);
         break;

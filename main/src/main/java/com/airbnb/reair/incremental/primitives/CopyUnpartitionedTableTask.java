@@ -146,7 +146,7 @@ public class CopyUnpartitionedTableTask implements ReplicationTask {
         return new RunInfo(RunInfo.RunStatus.NOT_COMPLETABLE, 0);
       }
 
-      if (!FsUtils.dirExists(conf, srcPath.get())) {
+      if (!FsUtils.dirExists(FsUtils.srcFilesystem(conf), srcPath.get())) {
         LOG.debug(String.format("Need to copy %s to %s, but "
             + "source directory is missing",
             srcPath, destPath));

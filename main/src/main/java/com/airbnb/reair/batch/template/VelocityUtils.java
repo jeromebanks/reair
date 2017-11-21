@@ -29,6 +29,8 @@ public class VelocityUtils {
     ve.setProperty("classpath.resource.loader.class",
         ClasspathResourceLoader.class.getName());
 
+    ve.setProperty("runtime.log.logsystem.log4j.category", "velocity");
+    ve.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     StringWriter sw = new StringWriter();
 
     try {

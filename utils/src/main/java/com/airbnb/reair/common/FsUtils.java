@@ -11,6 +11,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.fs.Trash;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
@@ -29,6 +30,7 @@ public class FsUtils {
 
   private static final Log LOG = LogFactory.getLog(FsUtils.class);
 
+
   public static boolean sameFs(Path p1, Path p2) {
     return StringUtils.equals(p1.toUri().getScheme(), p2.toUri().getScheme())
         && StringUtils.equals(p1.toUri().getAuthority(), p2.toUri().getAuthority());
@@ -44,11 +46,11 @@ public class FsUtils {
    *
    * @throws IOException if there's an error accessing the filesystem
    */
-  public static long getSize(Configuration conf, Path path, Optional<PathFilter> filter)
+  public static long getSize(FileSystem fs, Path path, Optional<PathFilter> filter)
       throws IOException {
     long totalSize = 0;
 
-    FileSystem fs = FileSystem.get(path.toUri(), conf);
+    /////FileSystem fs = FileSystem.get(path.toUri(), conf);
 
     Queue<Path> pathsToCheck = new LinkedList<>();
     pathsToCheck.add(path);
@@ -84,10 +86,10 @@ public class FsUtils {
    *
    * @throws IOException if there's an error accessing the filesystem
    */
-  public static boolean exceedsSize(Configuration conf, Path path, long maxSize)
+  public static boolean exceedsSize(FileSystem fs, Path path, long maxSize)
       throws IOException {
     long totalSize = 0;
-    FileSystem fs = FileSystem.get(path.toUri(), conf);
+    ///FileSystem fs = FileSystem.get(path.toUri(), conf);
 
     Queue<Path> pathsToCheck = new LinkedList<>();
     pathsToCheck.add(path);
@@ -122,10 +124,10 @@ public class FsUtils {
    * @throws IOException if there's an error accessing the filesystem
    */
   public static Set<FileStatus> getFileStatusesRecursive(
-      Configuration conf,
+          FileSystem fs,
       Path path,
       Optional<PathFilter> filter) throws IOException {
-    FileSystem fs = FileSystem.get(path.toUri(), conf);
+    ///FileSystem fs = FileSystem.get(path.toUri(), conf);
     Set<FileStatus> fileStatuses = new HashSet<>();
 
     Queue<Path> pathsToCheck = new LinkedList<>();
@@ -140,7 +142,7 @@ public class FsUtils {
         LOG.warn("Skipping check of directory: " + pathToCheck);
         continue;
       }
-      FileStatus[] statuses = fs.listStatus(pathToCheck);
+      FileStatus[] statuses = fs.listStatus(fixPath(fs,pathToCheck));
       for (FileStatus status : statuses) {
         if (status.isDirectory()) {
           pathsToCheck.add(status.getPath());
@@ -210,11 +212,15 @@ public class FsUtils {
    */
   public static String getRelativePath(Path root, Path child) {
     // TODO: Use URI.relativize()
-    String prefix = getPathWithSlash(root.toString());
-    if (!child.toString().startsWith(prefix)) {
+    URI rootURI = root.toUri();
+    URI childURI = child.toUri();
+    String rootPath = getPathWithSlash(rootURI.getPath());
+    String childPath = childURI.getPath();
+
+    if (!childPath.startsWith(rootPath)) {
       throw new RuntimeException("Invalid root: " + root + " and child " + child);
     }
-    return child.toString().substring(prefix.length());
+    return childPath.substring(rootPath.length());
   }
 
   /**
@@ -245,8 +251,9 @@ public class FsUtils {
    */
   public static boolean filesExistOnDestButNotSrc(Configuration conf, Path src, Path dest,
       Optional<PathFilter> filter) throws IOException {
-    Set<FileStatus> srcFileStatuses = getFileStatusesRecursive(conf, src, filter);
-    Set<FileStatus> destFileStatuses = getFileStatusesRecursive(conf, dest, filter);
+    Set<FileStatus> srcFileStatuses = getFileStatusesRecursive(srcFilesystem(conf), src, filter);
+
+    Set<FileStatus> destFileStatuses = getFileStatusesRecursive(destFilesystem(conf), dest, filter);
 
     Map<String, Long> srcFileSizes = null;
     Map<String, Long> destFileSizes = null;
@@ -288,6 +295,38 @@ public class FsUtils {
     return equalDirs(conf, src, dest, filter, false);
   }
 
+
+  private static FileSystem _srcFS = null;
+  public static FileSystem srcFilesystem( Configuration conf ) throws IOException {
+    try {
+      String srcFileSystem = conf.get("airbnb.reair.clusters.src.hdfs.root");
+      LOG.info("SRC FILESYSTEM = " + srcFileSystem);
+      if (_srcFS == null) {
+        _srcFS = FileSystem.get(new java.net.URI(srcFileSystem), conf);
+      }
+      return _srcFS;
+    } catch( java.net.URISyntaxException synErr) {
+      synErr.printStackTrace();
+      throw new IOException(" Can't find SRC File system", synErr);
+    }
+  }
+
+  private static FileSystem _destFS = null;
+  public static FileSystem destFilesystem( Configuration conf ) throws IOException {
+    try {
+      String destFileSystem = conf.get("airbnb.reair.clusters.dest.hdfs.root");
+      LOG.info("DEST FILESYSTEM = " + destFileSystem);
+      if (_destFS == null) {
+        _destFS = FileSystem.get(new java.net.URI(destFileSystem), conf);
+      }
+      return _destFS;
+    } catch( java.net.URISyntaxException synErr) {
+      synErr.printStackTrace();
+      throw new IOException(" Can't find DEST File system", synErr);
+    }
+  }
+
+
   /**
    * Checks to see if two directories are equal. The directories are considered equal if they have
    * the same non-zero files with the same sizes in the same paths (with the same modification times
@@ -304,15 +343,15 @@ public class FsUtils {
    */
   public static boolean equalDirs(Configuration conf, Path src, Path dest,
       Optional<PathFilter> filter, boolean compareModificationTimes) throws IOException {
-    boolean srcExists = src.getFileSystem(conf).exists(src);
-    boolean destExists = dest.getFileSystem(conf).exists(dest);
+    boolean srcExists = pathExists(srcFilesystem( conf),src);
+    boolean destExists = pathExists(destFilesystem(conf),dest);
 
     if (!srcExists || !destExists) {
       return false;
     }
 
-    Set<FileStatus> srcFileStatuses = getFileStatusesRecursive(conf, src, filter);
-    Set<FileStatus> destFileStatuses = getFileStatusesRecursive(conf, dest, filter);
+    Set<FileStatus> srcFileStatuses = getFileStatusesRecursive(srcFilesystem(conf), src, filter);
+    Set<FileStatus> destFileStatuses = getFileStatusesRecursive(destFilesystem(conf), dest, filter);
 
     Map<String, Long> srcFileSizes = null;
     Map<String, Long> destFileSizes = null;
@@ -330,15 +369,20 @@ public class FsUtils {
     // Size check is sort of redundant, but is a quick one to show.
     LOG.debug("Size of " + src + " is " + srcSize);
     LOG.debug("Size of " + dest + " is " + destSize);
+    LOG.info("SRC Size of " + src + " is " + srcSize);
+    LOG.info("DEST Size of " + dest + " is " + destSize);
 
     if (srcSize != destSize) {
       LOG.debug(String.format("Size of %s and %s do not match!", src, dest));
+      LOG.info(String.format("Size of %s and %s do not match!", src, dest));
       return false;
     }
 
     if (srcFileSizes.size() != destFileSizes.size()) {
       LOG.warn(String.format("Number of files in %s (%d) and %s (%d) " + "do not match!", src,
           srcFileSizes.size(), dest, destFileSizes.size()));
+      LOG.info(String.format("Number of files in %s (%d) and %s (%d) " + "do not match!", src,
+              srcFileSizes.size(), dest, destFileSizes.size()));
       return false;
     }
 
@@ -371,12 +415,17 @@ public class FsUtils {
               "Modification time mismatch between " + "%s (%d) in %s and %s (%d) in %s", file,
               srcFileModificationTimes.get(file), src, file, destFileModificationTimes.get(file),
               dest));
+          LOG.info(String.format(
+                  "Modification time mismatch between " + "%s (%d) in %s and %s (%d) in %s", file,
+                  srcFileModificationTimes.get(file), src, file, destFileModificationTimes.get(file),
+                  dest));
           return false;
         }
       }
     }
 
     LOG.debug(String.format("%s and %s are the same", src, dest));
+    LOG.info(String.format("%s and %s are the same", src, dest));
     return true;
   }
 
@@ -393,7 +442,7 @@ public class FsUtils {
    */
   public static void syncModificationTimes(Configuration conf, Path src, Path dest,
       Optional<PathFilter> filter) throws IOException {
-    Set<FileStatus> srcFileStatuses = getFileStatusesRecursive(conf, src, filter);
+    Set<FileStatus> srcFileStatuses = getFileStatusesRecursive(srcFilesystem(conf), src, filter);
 
     Map<String, Long> srcFileModificationTimes = null;
 
@@ -403,7 +452,7 @@ public class FsUtils {
       throw new IOException("Invalid file statuses!", e);
     }
 
-    FileSystem destFs = dest.getFileSystem(conf);
+    FileSystem destFs = destFilesystem(conf);
 
     for (String file : srcFileModificationTimes.keySet()) {
       destFs.setTimes(new Path(dest, file), srcFileModificationTimes.get(file), -1);
@@ -420,16 +469,16 @@ public class FsUtils {
    * @throws IOException if there's an error moving the directory
    */
   public static void moveDir(Configuration conf, Path src, Path dest) throws IOException {
-    FileSystem srcFs = FileSystem.get(src.toUri(), conf);
-    FileSystem destFs = FileSystem.get(dest.toUri(), conf);
+    FileSystem srcFs = srcFilesystem( conf);
+    FileSystem destFs = destFilesystem( conf);
     if (!srcFs.getUri().equals(destFs.getUri())) {
       throw new IOException("Source and destination filesystems " + "are different! src: "
           + srcFs.getUri() + " dest: " + destFs.getUri());
     }
 
     Path destPathParent = dest.getParent();
-    if (destFs.exists(destPathParent)) {
-      if (!destFs.isDirectory(destPathParent)) {
+    if (pathExists(destFs,destPathParent)) {
+      if (!dirExists(destFs,destPathParent)) {
         throw new IOException("File exists instead of destination " + destPathParent);
       } else {
         LOG.debug("Parent directory exists: " + destPathParent);
@@ -452,9 +501,30 @@ public class FsUtils {
    *
    * @throws IOException if there's an error accessing the filesystem
    */
-  public static boolean dirExists(Configuration conf, Path path) throws IOException {
-    FileSystem fs = FileSystem.get(path.toUri(), conf);
-    return fs.exists(path) && fs.isDirectory(path);
+  public static boolean dirExists(FileSystem fs, Path path) throws IOException {
+    Path fPath = fixPath(fs, path);
+    return fs.exists(fPath) && fs.isDirectory(fPath);
+  }
+  public static boolean fileExists(FileSystem fs, Path path) throws IOException {
+    Path fPath = fixPath(fs, path);
+    return fs.exists(fPath) && !fs.isDirectory(fPath);
+  }
+  public static boolean pathExists(FileSystem fs, Path path) throws IOException {
+    Path fPath = fixPath(fs, path);
+    return fs.exists(fPath);
+  }
+
+  public static Path fixPath( FileSystem fs, Path path) {
+    if (path.isUriPathAbsolute()) {
+      URI pathURI = path.toUri();
+      if (pathURI.getHost().equals("nameservice1")) {
+        return new Path(fs.getUri().getHost(), pathURI.getPath());
+      } else {
+        return path;
+      }
+    } else {
+      return path;
+    }
   }
 
   /**
@@ -465,13 +535,13 @@ public class FsUtils {
    *
    * @throws IOException if there's an error deleting the directory.
    */
-  public static void deleteDirectory(Configuration conf, Path path) throws IOException {
+  public static void deleteDirectory(FileSystem fs,  Path path) throws IOException {
 
-    Trash trash = new Trash(path.getFileSystem(conf), conf);
+    Trash trash = new Trash(fs, fs.getConf());
     try {
       if (!trash.isEnabled()) {
         LOG.debug("Trash is not enabled for " + path + " so deleting instead");
-        FileSystem fs = path.getFileSystem(conf);
+        //FileSystem fs = path.getFileSystem(conf);
         fs.delete(path, true);
       } else {
         boolean removed = trash.moveToTrash(path);
@@ -508,11 +578,10 @@ public class FsUtils {
    *
    * @throws IOException if there's an error with the filesystem
    */
-  public static void replaceDirectory(Configuration conf, Path src, Path dest) throws IOException {
-    FileSystem fs = dest.getFileSystem(conf);
-    if (fs.exists(dest)) {
+  public static void replaceDirectory(FileSystem fs, Path src, Path dest) throws IOException {
+    if (dirExists(fs,dest)) {
       LOG.debug("Removing " + dest + " since it exists");
-      deleteDirectory(conf, dest);
+      deleteDirectory(fs, dest);
     }
     LOG.debug("Renaming " + src + " to " + dest);
     fs.rename(src, dest);
@@ -529,10 +598,10 @@ public class FsUtils {
    */
   public static Optional<Boolean> checksumsMatch(Configuration conf, Path srcFile, Path destFile)
       throws IOException {
-    FileSystem srcFs = srcFile.getFileSystem(conf);
+    FileSystem srcFs = srcFilesystem(conf);
     FileChecksum srcChecksum = srcFs.getFileChecksum(srcFile);
 
-    FileSystem destFs = destFile.getFileSystem(conf);
+    FileSystem destFs = destFilesystem(conf);
     FileChecksum destChecksum = destFs.getFileChecksum(destFile);
 
     if (srcChecksum == null || destChecksum == null) {

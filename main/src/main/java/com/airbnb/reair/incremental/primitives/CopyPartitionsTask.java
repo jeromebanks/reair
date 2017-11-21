@@ -182,19 +182,21 @@ public class CopyPartitionsTask implements ReplicationTask {
         if (partition != null && partition.getSd().getLocation() != null) {
           Path partitionLocation = new Path(partition.getSd().getLocation());
           if (FsUtils.isSubDirectory(commonDir, partitionLocation)
-              && FsUtils.dirExists(conf, partitionLocation)) {
+              && FsUtils.dirExists( FsUtils.srcFilesystem(conf), partitionLocation)) {
             sizeOfPartitionsInCommonDirectory +=
-                FsUtils.getSize(conf, partitionLocation, Optional.empty());
+                FsUtils.getSize(FsUtils.srcFilesystem(conf), partitionLocation, Optional.empty());
           }
         }
       }
 
-      if (!FsUtils.dirExists(conf, commonDir)) {
+      if (!FsUtils.dirExists(FsUtils.srcFilesystem(conf), commonDir)) {
         LOG.debug(String.format("Common dir: %s does not exist", commonDir));
-      } else if (!FsUtils.exceedsSize(conf, commonDir, sizeOfPartitionsInCommonDirectory * 2)) {
+        LOG.info(String.format("Common dir: %s does not exist", commonDir));
+      } else if (!FsUtils.exceedsSize(FsUtils.srcFilesystem(conf), commonDir, sizeOfPartitionsInCommonDirectory * 2)) {
         doOptimisticCopy = true;
       } else {
-        LOG.debug(String.format(
+        ////LOG.debug(String.format(
+                LOG.info(String.format(
             "Size of common directory %s is much " + "bigger than the size of the partitions in "
                 + "the common directory (%s). Hence, not " + "copying the common directory",
             commonDir, sizeOfPartitionsInCommonDirectory));
@@ -211,16 +213,16 @@ public class CopyPartitionsTask implements ReplicationTask {
       Path destinationLocationPath = new Path(destinationLocation);
 
       if (!objectModifier.shouldCopyData(destinationLocation)) {
-        LOG.debug("Skipping copy of destination location " + commonDirectory
+        LOG.info("Skipping copy of destination location " + commonDirectory
             + " due to destination " + "object factory");
-      } else if (!FsUtils.dirExists(conf, commonDir)) {
-        LOG.debug("Skipping copy of destination location " + commonDirectory
+      } else if (!FsUtils.dirExists(FsUtils.destFilesystem(conf), commonDir)) {
+        LOG.info("Skipping copy of destination location " + commonDirectory
             + " since it does not exist");
       } else if (FsUtils.equalDirs(conf, commonDir, destinationLocationPath)) {
-        LOG.debug("Skipping copying common directory " + commonDir + " since it matches "
+        LOG.info("Skipping copying common directory " + commonDir + " since it matches "
             + destinationLocationPath);
       } else {
-        LOG.debug("Optimistically copying common directory " + commonDir);
+        LOG.info("Optimistically copying common directory " + commonDir);
         Random random = new Random();
         long randomLong = random.nextLong();
 

@@ -525,7 +525,7 @@ public class ReplicationJob extends Configured implements Tool {
     FileSystem fs = logPath.getFileSystem(getConf());
     if (!fs.exists(logPath)) {
       LOG.info("Creating " + logPath);
-    } else if (FsUtils.getSize(getConf(), logPath, Optional.empty()) != 0) {
+    } else if (FsUtils.getSize(fs, logPath, Optional.empty()) != 0) {
       LOG.error("Log directory already exists and is not empty: " + logPath);
       return -1;
     }
@@ -543,10 +543,10 @@ public class ReplicationJob extends Configured implements Tool {
       Path tmpDir = new Path(tmpDirStr);
 
       // Verify that destination directory exists
-      if (!FsUtils.dirExists(getConf(), destDir)) {
+      if (!FsUtils.dirExists(FsUtils.destFilesystem(getConf()), destDir)) {
         LOG.warn("Destination directory does not exist. Creating " + destDir);
-        FileSystem destFs = destDir.getFileSystem(getConf());
-        fs.mkdirs(destDir);
+        FileSystem destFS = FsUtils.destFilesystem(getConf());
+        destFS.mkdirs(destDir);
       }
 
       LOG.info("Starting stage 1 with log directory " + stage1LogDir);

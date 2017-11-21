@@ -118,61 +118,67 @@ public class TableCompareWorker {
   }
 
   protected List<String> processTable(final String db, final String table)
-    throws IOException, HiveMetastoreException {
-    // If table and db matches black list, we will skip it.
-    if (Iterables.any(blackList,
-          new Predicate<BlackListPair>() {
-            @Override
-            public boolean apply(@Nullable BlackListPair blackListPair) {
-              return blackListPair.matches(db, table);
-            }
-          })) {
-      return Collections.emptyList();
-    }
-
-    HiveObjectSpec spec = new HiveObjectSpec(db, table);
-
-    // Table exists in source, but not in dest. It should copy the table.
-    TaskEstimate estimate = estimator.analyze(spec);
-    ArrayList<String> ret = new ArrayList<>();
-
-    ret.add(MetastoreReplicationJob.serializeJobResult(estimate, spec));
-
-    Table tab = srcClient.getTable(db, table);
-    if (tab != null && tab.getPartitionKeys().size() > 0) {
-      // For partitioned table, if action is COPY we need to make sure to handle partition key
-      // change case first. The copy task will be run twice once here and the other time at commit
-      // phase. The task will handle the case properly.
-      if (estimate.getTaskType() == TaskEstimate.TaskType.COPY_PARTITIONED_TABLE) {
-        CopyPartitionedTableTask copyPartitionedTableTaskJob = new CopyPartitionedTableTask(
-            conf,
-            DESTINATION_OBJECT_FACTORY,
-            objectConflictHandler,
-            srcCluster,
-            dstCluster,
-            spec,
-            Optional.<Path>empty());
-        copyPartitionedTableTaskJob.runTask();
+    throws IOException {
+    try {
+      // If table and db matches black list, we will skip it.
+      if (Iterables.any(blackList,
+              new Predicate<BlackListPair>() {
+                @Override
+                public boolean apply(@Nullable BlackListPair blackListPair) {
+                  return blackListPair.matches(db, table);
+                }
+              })) {
+        return Collections.emptyList();
       }
 
-      // partition tables need to generate partitions.
-      HashSet<String> partNames = Sets.newHashSet(srcClient.getPartitionNames(db, table));
-      HashSet<String> dstPartNames = Sets.newHashSet(dstClient.getPartitionNames(db, table));
-      ret.addAll(Lists.transform(Lists.newArrayList(Sets.union(partNames, dstPartNames)),
-            new Function<String, String>() {
-              public String apply(String str) {
-                return MetastoreReplicationJob.serializeJobResult(
-                    new TaskEstimate(TaskEstimate.TaskType.CHECK_PARTITION,
-                      false,
-                      false,
-                      Optional.empty(),
-                      Optional.empty()),
-                    new HiveObjectSpec(db, table, str));
-              }
-            }));
-    }
+      HiveObjectSpec spec = new HiveObjectSpec(db, table);
 
-    return ret;
+      // Table exists in source, but not in dest. It should copy the table.
+      TaskEstimate estimate = estimator.analyze(spec);
+      ArrayList<String> ret = new ArrayList<>();
+
+      ret.add(MetastoreReplicationJob.serializeJobResult(estimate, spec));
+
+      Table tab = srcClient.getTable(db, table);
+      if (tab != null && tab.getPartitionKeys().size() > 0) {
+        // For partitioned table, if action is COPY we need to make sure to handle partition key
+        // change case first. The copy task will be run twice once here and the other time at commit
+        // phase. The task will handle the case properly.
+        if (estimate.getTaskType() == TaskEstimate.TaskType.COPY_PARTITIONED_TABLE) {
+          CopyPartitionedTableTask copyPartitionedTableTaskJob = new CopyPartitionedTableTask(
+                  conf,
+                  DESTINATION_OBJECT_FACTORY,
+                  objectConflictHandler,
+                  srcCluster,
+                  dstCluster,
+                  spec,
+                  Optional.<Path>empty());
+          copyPartitionedTableTaskJob.runTask();
+        }
+
+        // partition tables need to generate partitions.
+        HashSet<String> partNames = Sets.newHashSet(srcClient.getPartitionNames(db, table));
+        HashSet<String> dstPartNames = Sets.newHashSet(dstClient.getPartitionNames(db, table));
+        ret.addAll(Lists.transform(Lists.newArrayList(Sets.union(partNames, dstPartNames)),
+                new Function<String, String>() {
+                  public String apply(String str) {
+                    return MetastoreReplicationJob.serializeJobResult(
+                            new TaskEstimate(TaskEstimate.TaskType.CHECK_PARTITION,
+                                    false,
+                                    false,
+                                    Optional.empty(),
+                                    Optional.empty()),
+                            new HiveObjectSpec(db, table, str));
+                  }
+                }));
+      }
+
+      return ret;
+    } catch( HiveMetastoreException e) {
+      e.printStackTrace( System.err);
+      System.err.println( " ERROR PROCESSING  " + db +  "." + table);
+              return new ArrayList<String>();
+    }
   }
 
   protected void cleanup() throws IOException, InterruptedException {

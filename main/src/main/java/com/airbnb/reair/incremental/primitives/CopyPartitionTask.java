@@ -193,7 +193,7 @@ public class CopyPartitionTask implements ReplicationTask {
           // directory to the expected location.
           Path destinationPath = new Path(destPartition.getSd().getLocation());
 
-          FsUtils.replaceDirectory(conf, copiedPartitionDataLocation, destinationPath);
+          FsUtils.replaceDirectory(FsUtils.destFilesystem(conf), copiedPartitionDataLocation, destinationPath);
         } else {
           needToCopy = !directoryCopier.equalDirs(srcPath.get(), destPath.get());
         }
@@ -209,7 +209,7 @@ public class CopyPartitionTask implements ReplicationTask {
         return new RunInfo(RunInfo.RunStatus.NOT_COMPLETABLE, 0);
       }
 
-      if (!FsUtils.dirExists(conf, srcPath.get())) {
+      if (!FsUtils.dirExists(FsUtils.srcFilesystem(conf), srcPath.get())) {
         LOG.error("Source path " + srcPath + " does not exist!");
         return new RunInfo(RunInfo.RunStatus.NOT_COMPLETABLE, 0);
       }

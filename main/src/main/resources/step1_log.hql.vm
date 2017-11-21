@@ -1,9 +1,9 @@
 CREATE TABLE IF NOT EXISTS replication_step1_output (
       action_name STRING,         -- action for the entity
+      copy_metadata STRING,  -- should copy metadata
+      copy_data STRING,      -- should copy data
       src_path STRING,       -- source entity path
       dest_path STRING,      -- destination enitity path
-      copy_data STRING,      -- should copy data
-      copy_metadata STRING,  -- should copy metadata
       db_name STRING,        -- database name
       table_name STRING,     -- table name
       partition_name STRING) -- partition spec

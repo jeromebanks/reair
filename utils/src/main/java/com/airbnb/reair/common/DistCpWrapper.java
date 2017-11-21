@@ -49,7 +49,7 @@ public class DistCpWrapper {
     Path distCpTmpDir = options.getDistCpTmpDir();
     Path distCpLogDir = options.getDistCpLogDir();
 
-    boolean destDirExists = FsUtils.dirExists(conf, destDir);
+    boolean destDirExists = FsUtils.dirExists(FsUtils.destFilesystem(conf), destDir);
     LOG.debug("Dest dir " + destDir + " exists is " + destDirExists);
 
     boolean syncModificationTimes = options.getSyncModificationTimes();
@@ -84,7 +84,7 @@ public class DistCpWrapper {
 
     if (destDirExists && canDeleteDest && !useDistcpUpdate && !atomic) {
       LOG.debug("Unable to use distcp update, so deleting " + destDir + " since it already exists");
-      FsUtils.deleteDirectory(conf, destDir);
+      FsUtils.deleteDirectory(FsUtils.destFilesystem(conf), destDir);
     }
 
     Path distcpDestDir;
@@ -101,7 +101,7 @@ public class DistCpWrapper {
 
 
     Set<FileStatus> fileStatuses =
-        FsUtils.getFileStatusesRecursive(conf, srcDir, Optional.empty());
+        FsUtils.getFileStatusesRecursive(FsUtils.srcFilesystem(conf), srcDir, Optional.empty());
 
     long srcSize = 0;
     for (FileStatus status : fileStatuses) {
@@ -189,7 +189,7 @@ public class DistCpWrapper {
       LOG.error("Source and destination sizes don't match!");
       if (atomic) {
         LOG.debug("Since it's an atomic copy, deleting " + distcpDestDir);
-        FsUtils.deleteDirectory(conf, distcpDestDir);
+        FsUtils.deleteDirectory(FsUtils.destFilesystem(conf), distcpDestDir);
         throw new DistCpException("distcp result mismatch");
       }
     } else {
@@ -199,17 +199,17 @@ public class DistCpWrapper {
     if (atomic) {
       // Size is good, clear out the final destination directory and
       // replace with the copied version.
-      destDirExists = FsUtils.dirExists(conf, destDir);
+      destDirExists = FsUtils.dirExists(FsUtils.destFilesystem(conf), destDir);
       if (destDirExists) {
         LOG.debug("Deleting existing directory " + destDir);
-        FsUtils.deleteDirectory(conf, destDir);
+        FsUtils.deleteDirectory(FsUtils.destFilesystem(conf), destDir);
       }
       LOG.debug("Moving from " + distCpTmpDir + " to " + destDir);
       FsUtils.moveDir(conf, distcpDestDir, destDir);
     }
 
     LOG.debug("Deleting log directory " + distCpLogDir);
-    FsUtils.deleteDirectory(conf, distCpLogDir);
+    FsUtils.deleteDirectory(FsUtils.destFilesystem(conf), distCpLogDir);
 
     // Not necessarily the bytes copied if using -update
     return srcSize;

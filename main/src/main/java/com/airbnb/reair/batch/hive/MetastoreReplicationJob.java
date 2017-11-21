@@ -282,6 +282,7 @@ public class MetastoreReplicationJob extends Configured implements Tool {
     String jobStartTime = String.format("%tY-%<tm-%<tdT%<tH_%<tM_%<tS",
         calendar);
 
+
     velocityContext.put("job_start_time", jobStartTime);
     velocityContext.put("step1_output_directory", step1Out.toString());
     velocityContext.put("step2_output_directory", step2Out.toString());
@@ -307,11 +308,12 @@ public class MetastoreReplicationJob extends Configured implements Tool {
 
     if (step == -1) {
       LOG.info("Deleting " + step1Out);
-      FsUtils.deleteDirectory(getConf(), step1Out);
+      FileSystem logFS = step1Out.getFileSystem( getConf());
+      FsUtils.deleteDirectory(logFS, step1Out);
       LOG.info("Deleting " + step2Out);
-      FsUtils.deleteDirectory(getConf(), step2Out);
+      FsUtils.deleteDirectory(logFS, step2Out);
       LOG.info("Deleting " + step3Out);
-      FsUtils.deleteDirectory(getConf(), step3Out);
+      FsUtils.deleteDirectory(logFS, step3Out);
 
       if (runMetastoreCompareJob(tableListFileOnHdfs, step1Out) != 0) {
         return -1;
@@ -327,15 +329,16 @@ public class MetastoreReplicationJob extends Configured implements Tool {
 
       return 0;
     } else {
+      FileSystem logFS = step1Out.getFileSystem( getConf());
       switch (step) {
         case 1:
           LOG.info("Deleting " + step1Out);
-          FsUtils.deleteDirectory(this.getConf(), step1Out);
+          FsUtils.deleteDirectory(logFS, step1Out);
 
           return this.runMetastoreCompareJob(tableListFileOnHdfs, step1Out);
         case 2:
           LOG.info("Deleting " + step2Out);
-          FsUtils.deleteDirectory(getConf(), step2Out);
+          FsUtils.deleteDirectory(logFS, step2Out);
           if (cl.hasOption("override-input")) {
             step1Out = new Path(cl.getOptionValue("override-input"));
           }
@@ -343,7 +346,7 @@ public class MetastoreReplicationJob extends Configured implements Tool {
           return this.runHdfsCopyJob(new Path(step1Out, "part*"), step2Out);
         case 3:
           LOG.info("Deleting " + step3Out);
-          FsUtils.deleteDirectory(this.getConf(), step3Out);
+          FsUtils.deleteDirectory(logFS, step3Out);
           if (cl.hasOption("override-input")) {
             step1Out = new Path(cl.getOptionValue("override-input"));
           }
@@ -573,7 +576,8 @@ public class MetastoreReplicationJob extends Configured implements Tool {
 
         LOG.info(
             String.format("database %s, table %s processed", key.toString(), value.toString()));
-      } catch (HiveMetastoreException e) {
+      ///} catch (HiveMetastoreException e) {
+      } catch (IOException e) {
         throw new IOException(
             String.format(
                 "database %s, table %s got exception", key.toString(), value.toString()), e);
@@ -600,7 +604,7 @@ public class MetastoreReplicationJob extends Configured implements Tool {
 
     protected void map(LongWritable key, Text value, Context context)
         throws IOException, InterruptedException {
-      try {
+      ///try {
         String [] columns = value.toString().split("\\.");
         if (columns.length != 2) {
           LOG.error(String.format("invalid input at line %d: %s", key.get(), value.toString()));
@@ -608,16 +612,20 @@ public class MetastoreReplicationJob extends Configured implements Tool {
         }
 
         for (String result : worker.processTable(columns[0], columns[1])) {
-          context.write(new LongWritable((long)result.hashCode()), new Text(result));
+            context.write(new LongWritable((long) result.hashCode()), new Text(result));
         }
 
         LOG.info(
             String.format("database %s, table %s processed", key.toString(), value.toString()));
+        /**
       } catch (HiveMetastoreException e) {
+        /**
         throw new IOException(
             String.format(
                 "database %s, table %s got exception", key.toString(), value.toString()), e);
+                LOG.error(String.format("database %s, table %s got exception", key.toString(), value.toString()),e);
       }
+      **/
     }
 
     protected void cleanup(Context context) throws IOException, InterruptedException {

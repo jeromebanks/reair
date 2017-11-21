@@ -192,15 +192,18 @@ public class TaskEstimator {
     Optional<Path> destPath = ReplicationUtils.getLocation(expectedDestPartition);
 
     // See if we need to update the data
-    if (srcPath.isPresent() && !srcPath.equals(destPath)) {
+    ////if (srcPath.isPresent() && !srcPath.equals(destPath)) {
+    if (srcPath.isPresent() ) {
       updateData = !directoryCopier.equalDirs(srcPath.get(), destPath.get());
     }
+    LOG.info(" UPDATE DATA " + srcPath.get().toUri() + " TO " + destPath.get().toUri() + " = " + updateData);
 
     // A metadata update is required if the destination partition doesn't
     // exist or the metadata differs from what's expected.
     boolean updateMetadata =
         partitionOnDest == null || !ReplicationUtils.stripNonComparables(partitionOnDest)
             .equals(ReplicationUtils.stripNonComparables(expectedDestPartition));
+    LOG.info(" UPDATE METADATA  " +  updateMetadata);
 
     if (!updateData && !updateMetadata) {
       return new TaskEstimate(TaskEstimate.TaskType.NO_OP, false, false, Optional.empty(),

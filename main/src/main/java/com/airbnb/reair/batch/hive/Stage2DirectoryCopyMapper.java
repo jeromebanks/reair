@@ -2,6 +2,7 @@ package com.airbnb.reair.batch.hive;
 
 import static com.airbnb.reair.batch.hive.MetastoreReplicationJob.deseralizeJobResult;
 
+import com.airbnb.reair.common.FsUtils;
 import com.google.common.hash.Hashing;
 
 import com.airbnb.reair.common.HiveObjectSpec;
@@ -75,7 +76,7 @@ public class Stage2DirectoryCopyMapper extends Mapper<LongWritable, Text, LongWr
       boolean recreate) throws IOException {
     Path dstPath = new Path(dst);
 
-    FileSystem fs = dstPath.getFileSystem(conf);
+    FileSystem fs = FsUtils.destFilesystem(conf);
     if (fs.exists(dstPath) && !fs.delete(dstPath, true)) {
       throw new IOException("Failed to delete destination directory: " + dstPath.toString());
     }
@@ -107,10 +108,10 @@ public class Stage2DirectoryCopyMapper extends Mapper<LongWritable, Text, LongWr
     hdfsCleanDirectory(db, table, partition, dst.toString(), this.conf, true);
 
     try {
-      FileSystem srcFs = src.getFileSystem(this.conf);
+      FileSystem srcFs = FsUtils.srcFilesystem(this.conf);
       LOG.info("src file: " + src.toString());
 
-      for (FileStatus status : srcFs.listStatus(src, hiddenFileFilter)) {
+      for (FileStatus status : srcFs.listStatus(FsUtils.fixPath(srcFs,src), hiddenFileFilter)) {
         LOG.info("file: " + status.getPath().toString());
 
         long hashValue = Hashing.murmur3_128().hashLong(
