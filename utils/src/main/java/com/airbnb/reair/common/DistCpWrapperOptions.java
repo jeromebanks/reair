@@ -1,11 +1,18 @@
 package com.airbnb.reair.common;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.PriorityQueue;
 
 /**
  * A class to encapsulate various options required for running DistCp.
  */
 public class DistCpWrapperOptions {
+  private static final Log LOG = LogFactory.getLog(DistCpWrapperOptions.class);
 
   // The source directory to copy
   private Path srcDir;
@@ -35,6 +42,16 @@ public class DistCpWrapperOptions {
   private long localCopySizeThreshold = (long) 256e6;
   // Poll for the progress of DistCp every N ms
   private long distCpPollInterval = 2500;
+  // Use a variable amount of time for distcp job timeout, depending on filesize
+  // subject to a minimum and maximum
+  // ceil(filesize_gb) * timeoutMsPerGb contrained to range (min, max)
+  private boolean distcpDynamicJobTimeoutEnabled = false;
+  // timeout in millis per GB per mapper, size will get rounded up
+  private long distcpDynamicJobTimeoutMsPerGbPerMapper = 0;
+  // minimum job timeout for variable timeout (ms) which accounts for overhead
+  private long distcpDynamicJobTimeoutBase = distcpJobTimeout;
+  // maximum job timeout for variable timeout (ms)
+  private long distcpDynamicJobTimeoutMax = Long.MAX_VALUE;
 
   /**
    * Constructor for DistCp options.
@@ -81,6 +98,30 @@ public class DistCpWrapperOptions {
     return this;
   }
 
+  public DistCpWrapperOptions setDistcpDynamicJobTimeoutEnabled(
+      boolean distcpDynamicJobTimeoutEnabled) {
+    this.distcpDynamicJobTimeoutEnabled = distcpDynamicJobTimeoutEnabled;
+    return this;
+  }
+
+  public DistCpWrapperOptions setDistcpDynamicJobTimeoutMsPerGbPerMapper(
+      long distcpDynamicJobTimeoutMsPerGbPerMapper) {
+    this.distcpDynamicJobTimeoutMsPerGbPerMapper = distcpDynamicJobTimeoutMsPerGbPerMapper;
+    return this;
+  }
+
+  public DistCpWrapperOptions setDistcpDynamicJobTimeoutBase(
+      long distcpDynamicJobTimeoutBase) {
+    this.distcpDynamicJobTimeoutBase = distcpDynamicJobTimeoutBase;
+    return this;
+  }
+
+  public DistCpWrapperOptions setDistcpDynamicJobTimeoutMax(
+      long distcpDynamicJobTimeoutMax) {
+    this.distcpDynamicJobTimeoutMax = distcpDynamicJobTimeoutMax;
+    return this;
+  }
+
   public Path getSrcDir() {
     return srcDir;
   }
@@ -117,10 +158,6 @@ public class DistCpWrapperOptions {
     return filesPerMapper;
   }
 
-  public long getDistcpJobTimeout() {
-    return distcpJobTimeout;
-  }
-
   public long getLocalCopySizeThreshold() {
     return localCopySizeThreshold;
   }
@@ -131,5 +168,51 @@ public class DistCpWrapperOptions {
 
   public long getDistCpPollInterval() {
     return distCpPollInterval;
+  }
+
+  /**
+   * Returns the distcp timeout in milliseconds according to options set.
+   * @param fileSizes File sizes of the files to copy.
+   * @param maxConcurrency The number of mappers in distcp.
+   * @return The timeout in milliseconds for distcp.
+   */
+  public long getDistcpTimeout(List<Long> fileSizes, long maxConcurrency) {
+    if (distcpDynamicJobTimeoutEnabled) {
+      long bytesPerLongestMapper = computeLongestMapper(fileSizes, maxConcurrency);
+      long baseTimeout = distcpDynamicJobTimeoutBase;
+      long maxTimeout = distcpDynamicJobTimeoutMax;
+      long msPerGb = distcpDynamicJobTimeoutMsPerGbPerMapper;
+      long adjustment = ((long) Math.ceil(bytesPerLongestMapper / 1e9) * msPerGb);
+      long timeout = Math.min(maxTimeout, baseTimeout + adjustment);
+      LOG.debug(String.format("Setting dynamic timeout of %d milliseconds for max mapper size %d",
+          timeout, bytesPerLongestMapper));
+      return timeout;
+    } else {
+      return distcpJobTimeout;
+    }
+  }
+
+  /**
+   * Computes an estimate for how many bytes the mapper that copies the most will copy.
+   * This is within 4/3 of the optimal scheduling using a heuristic for the multiprocessor
+   * scheduling problem.
+   * @param fileSizes A list of filesizes to copy.
+   * @param maxConcurrency How many parallel processes will copy the files.
+   * @return An estimate of how many bytes the busiest mapper will copy.
+   */
+  public long computeLongestMapper(List<Long> fileSizes, long maxConcurrency) {
+    Collections.sort(fileSizes);
+    PriorityQueue<Long> processors = new PriorityQueue<>();
+    for (int i = 0; i < maxConcurrency; i++) {
+      processors.add(0L);
+    }
+    Long maxValue = 0L;
+    for (int i = fileSizes.size() - 1; i >= 0; i--) {
+      Long popped = processors.poll();
+      Long newValue = popped + fileSizes.get(i);
+      processors.add(newValue);
+      maxValue = Math.max(maxValue, newValue);
+    }
+    return maxValue;
   }
 }

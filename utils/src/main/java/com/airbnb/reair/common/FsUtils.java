@@ -11,9 +11,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.fs.Trash;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import java.io.*;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,7 +37,7 @@ public class FsUtils {
   /**
    * Get the total size of the files under the specified path.
    *
-   * @param conf the configuration object
+   * @param fs the filesystem object
    * @param path the path to get the size of
    * @param filter use this to filter out files and directories
    * @return the size of the given location in bytes, including the size of any subdirectories
@@ -49,8 +47,6 @@ public class FsUtils {
   public static long getSize(FileSystem fs, Path path, Optional<PathFilter> filter)
       throws IOException {
     long totalSize = 0;
-
-    /////FileSystem fs = FileSystem.get(path.toUri(), conf);
 
     Queue<Path> pathsToCheck = new LinkedList<>();
     pathsToCheck.add(path);
@@ -79,7 +75,7 @@ public class FsUtils {
   /**
    * Check if a directory exceeds the specified size.
    *
-   * @param conf configuration object
+   * @param fs filesystem object
    * @param path the path to check the size of
    * @param maxSize max size for comparison
    * @return whether the specified size exceeds the max size
@@ -89,7 +85,6 @@ public class FsUtils {
   public static boolean exceedsSize(FileSystem fs, Path path, long maxSize)
       throws IOException {
     long totalSize = 0;
-    ///FileSystem fs = FileSystem.get(path.toUri(), conf);
 
     Queue<Path> pathsToCheck = new LinkedList<>();
     pathsToCheck.add(path);
@@ -117,7 +112,7 @@ public class FsUtils {
   /**
    * Get the file statuses of all the files in the path, including subdirectories.
    *
-   * @param conf configuration object
+   * @param fs filesystem
    * @param path the path to examine
    *
    * @return the FileStatus of all the files in the supplied path, including subdirectories
@@ -127,7 +122,7 @@ public class FsUtils {
           FileSystem fs,
       Path path,
       Optional<PathFilter> filter) throws IOException {
-    ///FileSystem fs = FileSystem.get(path.toUri(), conf);
+
     Set<FileStatus> fileStatuses = new HashSet<>();
 
     Queue<Path> pathsToCheck = new LinkedList<>();
@@ -212,10 +207,10 @@ public class FsUtils {
    */
   public static String getRelativePath(Path root, Path child) {
     // TODO: Use URI.relativize()
-    URI rootURI = root.toUri();
-    URI childURI = child.toUri();
-    String rootPath = getPathWithSlash(rootURI.getPath());
-    String childPath = childURI.getPath();
+    URI rootUri = root.toUri();
+    URI childUri = child.toUri();
+    String rootPath = getPathWithSlash(rootUri.getPath());
+    String childPath = childUri.getPath();
 
     if (!childPath.startsWith(rootPath)) {
       throw new RuntimeException("Invalid root: " + root + " and child " + child);
@@ -299,9 +294,20 @@ public class FsUtils {
   private static FileSystem _srcFS = null;
   public static FileSystem srcFilesystem( Configuration conf ) throws IOException {
     try {
-      String srcFileSystem = conf.get("airbnb.reair.clusters.src.hdfs.root");
-      LOG.info("SRC FILESYSTEM = " + srcFileSystem);
+
       if (_srcFS == null) {
+        String srcFileSystem = conf.get("airbnb.reair.clusters.src.hdfs.root");
+        LOG.info("SRC FILESYSTEM = " + srcFileSystem);
+        if(srcFileSystem == null) {
+          ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+          DataOutputStream dataOut = new DataOutputStream( buffer);
+          conf.write( dataOut);
+          dataOut.flush();
+          String confStr = new String( buffer.toByteArray());
+          LOG.info( " SRC HDFS FILESYSTEM = NULL CONF = " + confStr) ;
+          conf.write( new DataOutputStream( System.out) );
+          throw new IOException( " SRC HDFS FILESYSTEM = NULL CONF = " + confStr) ;
+        }
         _srcFS = FileSystem.get(new java.net.URI(srcFileSystem), conf);
       }
       return _srcFS;
@@ -495,20 +501,22 @@ public class FsUtils {
   /**
    * Checks to see if a directory exists.
    *
-   * @param conf configuration object
+   * @param fs filesystem object
    * @param path the path to check
    * @return true if the path specifies a directory that exists
    *
    * @throws IOException if there's an error accessing the filesystem
    */
   public static boolean dirExists(FileSystem fs, Path path) throws IOException {
-    Path fPath = fixPath(fs, path);
-    return fs.exists(fPath) && fs.isDirectory(fPath);
+    Path fpath = fixPath(fs, path);
+    return fs.exists(fpath) && fs.isDirectory(fpath);
   }
+
   public static boolean fileExists(FileSystem fs, Path path) throws IOException {
-    Path fPath = fixPath(fs, path);
-    return fs.exists(fPath) && !fs.isDirectory(fPath);
+    Path fpath = fixPath(fs, path);
+    return fs.exists(fpath) && !fs.isDirectory(fpath);
   }
+
   public static boolean pathExists(FileSystem fs, Path path) throws IOException {
     Path fPath = fixPath(fs, path);
     return fs.exists(fPath);
@@ -530,7 +538,7 @@ public class FsUtils {
   /**
    * Delete the specified directory, using the trash as available.
    *
-   * @param conf configuration object
+   * @param fs filesystem object
    * @param path path to delete
    *
    * @throws IOException if there's an error deleting the directory.
@@ -572,7 +580,7 @@ public class FsUtils {
   /**
    * Replace a directory with another directory.
    *
-   * @param conf configuration object
+   * @param fs filesystem object
    * @param src source directory
    * @param dest destination directory
    *

@@ -103,9 +103,12 @@ public class DistCpWrapper {
     Set<FileStatus> fileStatuses =
         FsUtils.getFileStatusesRecursive(FsUtils.srcFilesystem(conf), srcDir, Optional.empty());
 
+    List<Long> fileSizes = new ArrayList<>();
+
     long srcSize = 0;
     for (FileStatus status : fileStatuses) {
       srcSize += status.getLen();
+      fileSizes.add(status.getLen());
     }
     LOG.debug(String.format(
         "%s has %s files with a total size of %s bytes",
@@ -169,7 +172,9 @@ public class DistCpWrapper {
       DistCp distCp = new DistCp();
       distCp.setConf(conf);
 
-      int ret = runDistCp(distCp, distcpArgs, options.getDistcpJobTimeout(),
+      long distCpTimeout = options.getDistcpTimeout(fileSizes, mappers);
+
+      int ret = runDistCp(distCp, distcpArgs, distCpTimeout,
           options.getDistCpPollInterval());
 
       if (Thread.currentThread().isInterrupted()) {

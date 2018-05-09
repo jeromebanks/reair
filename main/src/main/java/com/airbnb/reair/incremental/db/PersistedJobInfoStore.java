@@ -3,8 +3,6 @@ package com.airbnb.reair.incremental.db;
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 
-import com.airbnb.reair.common.Container;
-import com.airbnb.reair.common.HiveObjectSpec;
 import com.airbnb.reair.db.DbConnectionFactory;
 import com.airbnb.reair.incremental.ReplicationOperation;
 import com.airbnb.reair.incremental.ReplicationStatus;
@@ -174,146 +172,13 @@ public class PersistedJobInfoStore {
       Map<String, String> extras =
           extrasJson.map(ReplicationUtils::convertToMap).orElse(new HashMap<>());
 
-      PersistedJobInfo persistedJobInfo = new PersistedJobInfo(id, createTime, operation, status,
-          srcPath, srcClusterName, srcDbName, srcTableName, srcPartitionNames, srcObjectTldt,
-          renameToDbName, renameToTableName, renameToPartitionName, renameToPath, extras);
+      PersistedJobInfo persistedJobInfo = new PersistedJobInfo(Optional.of(id), createTime,
+          operation, status, srcPath, srcClusterName, srcDbName, srcTableName, srcPartitionNames,
+          srcObjectTldt, renameToDbName, renameToTableName, renameToPartitionName, renameToPath,
+          extras);
       persistedJobInfos.add(persistedJobInfo);
     }
     return persistedJobInfos;
-  }
-
-  /**
-   * Create an entry in the state table containing the supplied information. Retry until successful.
-   *
-   * @param operation type of operation
-   * @param status status of the job
-   * @param srcPath the source path
-   * @param srcClusterName the source cluster name
-   * @param srcTableSpec the source Hive table specification
-   * @param srcPartitionNames a list of partition names to copy
-   * @param srcTldt the source object's last modified time (transient_lastDdlTime)
-   * @param renameToObject if renaming, the specification for the new object
-   * @param renameToPath if renaming, the data path for the new object
-   * @param extras any extra, non-essential key/values that should be stored with the job
-   * @return a PersistedJobInfo containing the supplied parameters
-   */
-  public synchronized PersistedJobInfo resilientCreate(
-      final ReplicationOperation operation,
-      final ReplicationStatus status,
-      final Optional<Path> srcPath,
-      final String srcClusterName,
-      final HiveObjectSpec srcTableSpec,
-      final List<String> srcPartitionNames,
-      final Optional<String> srcTldt,
-      final Optional<HiveObjectSpec> renameToObject,
-      final Optional<Path> renameToPath,
-      final Map<String,
-      String> extras) throws StateUpdateException {
-    final PersistedJobInfo jobInfo = new PersistedJobInfo();
-
-    final Container<PersistedJobInfo> container = new Container<PersistedJobInfo>();
-    try {
-      retryingTaskRunner.runWithRetries(new RetryableTask() {
-        @Override
-        public void run() throws Exception {
-          container.set(create(operation, status, srcPath, srcClusterName, srcTableSpec,
-              srcPartitionNames, srcTldt, renameToObject, renameToPath, extras));
-        }
-      });
-    } catch (IOException | SQLException e) {
-      // These should be the only exceptions thrown.
-      throw new StateUpdateException(e);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-
-    return container.get();
-  }
-
-  /**
-   * Create an entry in the state table containing the supplied information.
-   *
-   * @param operation type of operation
-   * @param status status of the job
-   * @param srcPath the source path
-   * @param srcClusterName the source cluster name
-   * @param srcTableSpec the source Hive table specification
-   * @param srcPartitionNames a list of partition names to copy
-   * @param srcTldt the source object's last modified time (transient_lastDdlTime)
-   * @param renameToObject if renaming, the specification for the new object
-   * @param renameToPath if renaming, the data path for the new object
-   * @param extras any extra, non-essential key/values that should be stored with the job
-   * @return a PersistedJobInfo containing the supplied parameters
-   *
-   * @throws IOException if there is an error converting to JSON
-   * @throws SQLException if there's an error querying the DB
-   */
-  public synchronized PersistedJobInfo create(
-      ReplicationOperation operation,
-      ReplicationStatus status,
-      Optional<Path> srcPath,
-      String srcClusterName,
-      HiveObjectSpec srcTableSpec,
-      List<String> srcPartitionNames,
-      Optional<String> srcTldt,
-      Optional<HiveObjectSpec> renameToObject,
-      Optional<Path> renameToPath,
-      Map<String, String> extras) throws IOException, SQLException {
-    // Round to the nearest second to match MySQL timestamp resolution
-    long currentTime = System.currentTimeMillis() / 1000 * 1000;
-
-    String query = "INSERT INTO " + dbTableName + " SET " + "create_time = ?, " + "operation = ?, "
-        + "status = ?, " + "src_path = ?, " + "src_cluster = ?, " + "src_db = ?, "
-        + "src_table = ?, " + "src_partitions = ?, " + "src_tldt = ?, " + "rename_to_db = ?, "
-        + "rename_to_table = ?, " + "rename_to_partition = ?, " + "rename_to_path = ?, "
-        + "extras = ? ";
-
-    Connection connection = dbConnectionFactory.getConnection();
-
-    PreparedStatement ps = connection.prepareStatement(query, Statement.RETURN_GENERATED_KEYS);
-    try {
-      int queryParamIndex = 1;
-      ps.setTimestamp(queryParamIndex++, new Timestamp(currentTime));
-      ps.setString(queryParamIndex++, operation.toString());
-      ps.setString(queryParamIndex++, status.toString());
-      ps.setString(queryParamIndex++, srcPath.map(Path::toString).orElse(null));
-      ps.setString(queryParamIndex++, srcClusterName);
-      ps.setString(queryParamIndex++, srcTableSpec.getDbName());
-      ps.setString(queryParamIndex++, srcTableSpec.getTableName());
-      ps.setString(queryParamIndex++, ReplicationUtils.convertToJson(srcPartitionNames));
-      ps.setString(queryParamIndex++, srcTldt.orElse(null));
-      if (!renameToObject.isPresent()) {
-        ps.setString(queryParamIndex++, null);
-        ps.setString(queryParamIndex++, null);
-        ps.setString(queryParamIndex++, null);
-        ps.setString(queryParamIndex++, null);
-      } else {
-        ps.setString(queryParamIndex++, renameToObject.map(HiveObjectSpec::getDbName).orElse(null));
-        ps.setString(queryParamIndex++,
-            renameToObject.map(HiveObjectSpec::getTableName).orElse(null));
-        ps.setString(queryParamIndex++,
-            renameToObject.map(HiveObjectSpec::getPartitionName).orElse(null));
-        ps.setString(queryParamIndex++, renameToPath.map(Path::toString).orElse(null));
-      }
-      ps.setString(queryParamIndex++, ReplicationUtils.convertToJson(extras));
-
-      ps.execute();
-      ResultSet rs = ps.getGeneratedKeys();
-      boolean ret = rs.next();
-      if (!ret) {
-        // Shouldn't happen since we asked for the generated keys.
-        throw new RuntimeException("Unexpected behavior!");
-      }
-      long id = rs.getLong(1);
-      return new PersistedJobInfo(id, currentTime, operation, status, srcPath, srcClusterName,
-          srcTableSpec.getDbName(), srcTableSpec.getTableName(), srcPartitionNames, srcTldt,
-          renameToObject.map(HiveObjectSpec::getDbName),
-          renameToObject.map(HiveObjectSpec::getTableName),
-          renameToObject.map(HiveObjectSpec::getPartitionName), renameToPath, extras);
-    } finally {
-      ps.close();
-      ps = null;
-    }
   }
 
   private synchronized void persistHelper(PersistedJobInfo job) throws SQLException, IOException {
@@ -411,6 +276,80 @@ public class PersistedJobInfoStore {
     }
   }
 
+  private synchronized void createManyImpl(List<PersistedJobInfo> jobs)
+      throws IOException, SQLException, StateUpdateException {
+    LOG.debug(String.format("Persisting %d PersistedJobInfos", jobs.size()));
+    if (jobs.size() == 0) {
+      return;
+    }
+    String query = generateQuery(jobs.size());
+    Connection connection = dbConnectionFactory.getConnection();
+    try (PreparedStatement ps =
+             connection.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
+      int queryParamIndex = 1;
+      for (PersistedJobInfo job: jobs) {
+        ps.setTimestamp(queryParamIndex++, new Timestamp(job.getCreateTime()));
+        ps.setString(queryParamIndex++, job.getOperation().toString());
+        ps.setString(queryParamIndex++, job.getStatus().toString());
+        ps.setString(queryParamIndex++, job.getSrcPath().map(Path::toString).orElse(null));
+        ps.setString(queryParamIndex++, job.getSrcClusterName());
+        ps.setString(queryParamIndex++, job.getSrcDbName());
+        ps.setString(queryParamIndex++, job.getSrcTableName());
+        ps.setString(queryParamIndex++, ReplicationUtils.convertToJson(job.getSrcPartitionNames()));
+        ps.setString(queryParamIndex++, job.getSrcObjectTldt().orElse(null));
+        ps.setString(queryParamIndex++, job.getRenameToDb().orElse(null));
+        ps.setString(queryParamIndex++, job.getRenameToTable().orElse(null));
+        ps.setString(queryParamIndex++, job.getRenameToPartition().orElse(null));
+        ps.setString(queryParamIndex++, job.getRenameToPath().map(Path::toString).orElse(null));
+        ps.setString(queryParamIndex++, ReplicationUtils.convertToJson(job.getExtras()));
+      }
+      ps.execute();
+      ResultSet rs = ps.getGeneratedKeys();
+      for (PersistedJobInfo j : jobs) {
+        rs.next();
+        j.setPersisted(rs.getLong(1));
+      }
+    }
+  }
+
+  /**
+   * Persists PENDING PersistedJobInfos to the DB.
+   * @param jobs a list of PersistedJobInfos in the PENDING state
+   * @throws StateUpdateException if there is a SQLException or any Infos are not PENDING
+   */
+  public synchronized void createMany(List<PersistedJobInfo> jobs)
+      throws StateUpdateException {
+    for (PersistedJobInfo job: jobs) {
+      if (job.getPersistState() == PersistedJobInfo.PersistState.PERSISTED) {
+        throw new StateUpdateException("Tried to persist already persisted PersistedJobInfo.");
+      }
+    }
+    try {
+      retryingTaskRunner.runWithRetries(() -> createManyImpl(jobs));
+    } catch (IOException | SQLException e) {
+      throw new StateUpdateException(e);
+    } catch (StateUpdateException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private String generateQuery(int len) {
+    String valuesStr = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    StringBuffer sb = new StringBuffer();
+    sb.append(
+        "INSERT INTO " + dbTableName + " (create_time, operation, status, src_path, "
+            + "src_cluster, src_db, src_table, src_partitions, src_tldt, rename_to_db, "
+            + "rename_to_table, rename_to_partition, rename_to_path, extras) VALUES ");
+    for (int i = 1; i < len; i++) {
+      sb.append(valuesStr);
+      sb.append(" , ");
+    }
+    sb.append(valuesStr);
+    return sb.toString();
+  }
+
   private synchronized PersistedJobInfo getJob(long id) throws SQLException {
     String query = "SELECT id, create_time, operation, status, src_path, " + "src_cluster, src_db, "
         + "src_table, src_partitions, src_tldt, "
@@ -447,9 +386,10 @@ public class PersistedJobInfoStore {
         extras = ReplicationUtils.convertToMap(rs.getString("extras"));
       }
 
-      PersistedJobInfo persistedJobInfo = new PersistedJobInfo(id, createTime, operation, status,
-          srcPath, srcClusterName, srcDbName, srcTableName, srcPartitionNames, srcObjectTldt,
-          renameToDbName, renameToTableName, renameToPartitionName, renameToPath, extras);
+      PersistedJobInfo persistedJobInfo = new PersistedJobInfo(Optional.of(id), createTime,
+          operation, status, srcPath, srcClusterName, srcDbName, srcTableName, srcPartitionNames,
+          srcObjectTldt, renameToDbName, renameToTableName, renameToPartitionName, renameToPath,
+          extras);
       return persistedJobInfo;
     }
     return null;

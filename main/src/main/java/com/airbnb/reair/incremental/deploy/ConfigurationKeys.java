@@ -18,6 +18,9 @@ public class ConfigurationKeys {
   // Name of the table containing mapred job stats
   public static final String AUDIT_LOG_MAPRED_STATS_DB_TABLE =
       "airbnb.reair.audit_log.mapred_stats.db.table_name";
+  // Affects how many AuditLogEntries are read and processed at once, default 128
+  public static final String AUDIT_LOG_PROCESSING_BATCH_SIZE =
+      "airbnb.reair.audit_log.batch_size";
 
   // JDB URL to the DB containing the replication state tables
   public static final String STATE_JDBC_URL = "airbnb.reair.state.db.jdbc_url";
@@ -42,6 +45,8 @@ public class ConfigurationKeys {
   public static final String SRC_HDFS_ROOT = "airbnb.reair.clusters.src.hdfs.root";
   // The root of the temporary directory for storing temporary files on the source cluster
   public static final String SRC_HDFS_TMP = "airbnb.reair.clusters.src.hdfs.tmp";
+  /// Whether or not the srd HDFS filesystem is HAk
+  public static final String SRC_HDFS_IS_HA = "airbnb.reair.clusters.src.hdfs.is_ha";
 
   // Name to use for the destination cluster
   public static final String DEST_CLUSTER_NAME = "airbnb.reair.clusters.dest.name";
@@ -52,6 +57,8 @@ public class ConfigurationKeys {
   public static final String DEST_HDFS_ROOT = "airbnb.reair.clusters.dest.hdfs.root";
   // The root of the temporary directory for storing temporary files on the destination cluster
   public static final String DEST_HDFS_TMP = "airbnb.reair.clusters.dest.hdfs.tmp";
+  // Whether or not the destination HDFS filesystem is HA or not
+  public static final String DEST_HDFS_IS_HA = "airbnb.reair.clusters.dest.hdfs.is_ha";
 
   // Class to use for filtering out entries from the audit log
   public static final String OBJECT_FILTER_CLASS = "airbnb.reair.object.filter";
@@ -64,6 +71,15 @@ public class ConfigurationKeys {
   // When copying tables or partitions using an MR job, fail the job and retry if the job takes
   // longer than this many seconds.
   public static final String COPY_JOB_TIMEOUT_SECONDS = "airbnb.reair.copy.timeout.seconds";
+  // Whether to use a size based timeout for copy jobs
+  public static final String COPY_JOB_DYNAMIC_TIMEOUT_ENABLED =
+      "airbnb.reair.copy.timeout.dynamic.enabled";
+  public static final String COPY_JOB_DYNAMIC_TIMEOUT_MS_PER_GB_PER_MAPPER =
+      "airbnb.reair.copy.timeout.dynamic.ms_per_gb_per_mapper";
+  public static final String COPY_JOB_DYNAMIC_TIMEOUT_BASE =
+      "airbnb.reair.copy.timeout.dynamic.base.ms";
+  public static final String COPY_JOB_DYNAMIC_TIMEOUT_MAX =
+      "airbnb.reair.copy.timeout.dynamic.max.ms";
   // If a replication job fails, the number of times to retry the job.
   public static final String JOB_RETRIES = "airbnb.reair.job.retries";
   // After a copy, whether to set / check that modified times for the copied files match between

@@ -1,5 +1,6 @@
 package com.airbnb.reair.incremental.db;
 
+import com.airbnb.reair.common.HiveObjectSpec;
 import com.airbnb.reair.incremental.ReplicationOperation;
 import com.airbnb.reair.incremental.ReplicationStatus;
 
@@ -12,15 +13,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Information about a replication job that gets persisted to a DB.
  */
 public class PersistedJobInfo {
+  public enum PersistState {
+    PERSISTED, // if job is created in DB
+    PENDING // job hasnt been created yet in DB and has no ID
+  }
 
   private static final Log LOG = LogFactory.getLog(PersistedJobInfo.class);
 
-  private Long id;
+  private CompletableFuture<Long> id;
   private long createTime;
   private ReplicationOperation operation;
   private ReplicationStatus status;
@@ -48,13 +55,11 @@ public class PersistedJobInfo {
   // A flexible map to store some extra parameters
   private Map<String, String> extras;
 
+  private PersistState persistState;
+
   public static final String AUDIT_LOG_ID_EXTRAS_KEY = "audit_log_id";
   public static final String AUDIT_LOG_ENTRY_CREATE_TIME_KEY = "audit_log_entry_create_time";
   public static final String BYTES_COPIED_KEY = "bytes_copied";
-
-  public PersistedJobInfo() {
-
-  }
 
   /**
    * Constructor for a persisted job info.
@@ -76,8 +81,8 @@ public class PersistedJobInfo {
    * @param renameToPath if renaming an object, the new object's new location
    * @param extras a key value map of any extra information that is not critical to replication
    */
-  public PersistedJobInfo(
-      Long id,
+  PersistedJobInfo(
+      Optional<Long> id,
       Long createTime,
       ReplicationOperation operation,
       ReplicationStatus status,
@@ -92,7 +97,13 @@ public class PersistedJobInfo {
       Optional<String> renameToPartition,
       Optional<Path> renameToPath,
       Map<String, String> extras) {
-    this.id = id;
+    if (id.isPresent()) {
+      this.id = CompletableFuture.completedFuture(id.get());
+      this.persistState = PersistState.PERSISTED;
+    } else {
+      this.id = new CompletableFuture<>();
+      this.persistState = PersistState.PENDING;
+    }
     this.createTime = createTime;
     this.operation = operation;
     this.status = status;
@@ -119,12 +130,32 @@ public class PersistedJobInfo {
     }
   }
 
-  public void setId(Long id) {
-    this.id = id;
+  void setPersisted(Long id) {
+    if (this.persistState == PersistState.PERSISTED) {
+      throw new RuntimeException("PersistedJobInfo.setPersisted can only be called once.");
+    }
+    this.persistState = PersistState.PERSISTED;
+    this.id.complete(id);
   }
 
+  public PersistState getPersistState() {
+    return this.persistState;
+  }
+
+  /**
+   * Returns the ID if it has been persisted. Should only be called if persisted.
+   * @return the id
+   */
   public Long getId() {
-    return id;
+    try {
+      if (this.id.isDone()) {
+        return this.id.get();
+      } else {
+        throw new RuntimeException("getId should not be called before setPersisted().");
+      }
+    } catch (InterruptedException | ExecutionException e) {
+      throw new RuntimeException("These exceptions should never be thrown.");
+    }
   }
 
   public ReplicationOperation getOperation() {
@@ -215,7 +246,10 @@ public class PersistedJobInfo {
     if (extras != null ? !extras.equals(that.extras) : that.extras != null) {
       return false;
     }
-    if (id != null ? !id.equals(that.id) : that.id != null) {
+    // either the Future is determined and the value is equal, or they are the same future
+    if (id != null ? !(id.equals(that.id)
+        || (id.isDone() && id.getNow(null).equals(that.id.getNow(null)))) :
+        that.id != null) {
       return false;
     }
     if (operation != that.operation) {
@@ -283,5 +317,42 @@ public class PersistedJobInfo {
     result = 31 * result + (renameToPath != null ? renameToPath.hashCode() : 0);
     result = 31 * result + (extras != null ? extras.hashCode() : 0);
     return result;
+  }
+
+  /**
+   * Creates a PersistedJobInfo with no ID.
+   * @param operation operation
+   * @param status status
+   * @param srcPath srcPath
+   * @param srcClusterName srcClusterName
+   * @param srcTableSpec srcTableSpec
+   * @param srcPartitionNames srcPartitionNames
+   * @param srcTldt srcTldt
+   * @param renameToObject renameToObject
+   * @param renameToPath renameToPath
+   * @param extras extras
+   * @return An unpersisted PersistedJobInfo
+   */
+  public static PersistedJobInfo createDeferred(
+      ReplicationOperation operation,
+      ReplicationStatus status,
+      Optional<Path> srcPath,
+      String srcClusterName,
+      HiveObjectSpec srcTableSpec,
+      List<String> srcPartitionNames,
+      Optional<String> srcTldt,
+      Optional<HiveObjectSpec> renameToObject,
+      Optional<Path> renameToPath,
+      Map<String, String> extras) {
+    long timestampMillisRounded = System.currentTimeMillis() / 1000L * 1000L;
+    PersistedJobInfo persistedJobInfo =
+        new PersistedJobInfo(Optional.empty(), timestampMillisRounded, operation, status, srcPath,
+            srcClusterName, srcTableSpec.getDbName(), srcTableSpec.getTableName(),
+            srcPartitionNames, srcTldt,
+            renameToObject.map(HiveObjectSpec::getDbName),
+            renameToObject.map(HiveObjectSpec::getTableName),
+            renameToObject.map(HiveObjectSpec::getPartitionName),
+            renameToPath, extras);
+    return persistedJobInfo;
   }
 }

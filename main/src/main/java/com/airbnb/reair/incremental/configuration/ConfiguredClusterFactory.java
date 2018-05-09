@@ -55,6 +55,9 @@ public class ConfiguredClusterFactory implements ClusterFactory {
         ConfigurationKeys.DEST_HDFS_ROOT);
     String destHdfsTmp = conf.get(
         ConfigurationKeys.DEST_HDFS_TMP);
+
+
+    Boolean destIsHA = conf.getBoolean( ConfigurationKeys.DEST_HDFS_IS_HA , true );
     return new HardCodedCluster(
         destClusterName,
         destMetastoreUrl.getHost(),
@@ -62,7 +65,8 @@ public class ConfiguredClusterFactory implements ClusterFactory {
         null,
         null,
         new Path(destHdfsRoot),
-        new Path(destHdfsTmp));
+        new Path(destHdfsTmp),
+            destIsHA);
   }
 
   @Override
@@ -83,6 +87,8 @@ public class ConfiguredClusterFactory implements ClusterFactory {
         ConfigurationKeys.SRC_HDFS_ROOT);
     String srcHdfsTmp = conf.get(
         ConfigurationKeys.SRC_HDFS_TMP);
+    Boolean srcHdfsIsHA = conf.getBoolean(
+            ConfigurationKeys.SRC_HDFS_IS_HA, true);
     return new HardCodedCluster(
         srcClusterName,
         srcMetastoreUrl.getHost(),
@@ -90,7 +96,8 @@ public class ConfiguredClusterFactory implements ClusterFactory {
         null,
         null,
         new Path(srcHdfsRoot),
-        new Path(srcHdfsTmp));
+        new Path(srcHdfsTmp),
+            srcHdfsIsHA);
   }
 
   @Override

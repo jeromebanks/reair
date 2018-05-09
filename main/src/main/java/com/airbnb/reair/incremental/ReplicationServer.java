@@ -10,6 +10,7 @@ import com.airbnb.reair.incremental.configuration.DestinationObjectFactory;
 import com.airbnb.reair.incremental.configuration.ObjectConflictHandler;
 import com.airbnb.reair.incremental.db.PersistedJobInfo;
 import com.airbnb.reair.incremental.db.PersistedJobInfoStore;
+import com.airbnb.reair.incremental.deploy.ConfigurationKeys;
 import com.airbnb.reair.incremental.filter.ReplicationFilter;
 import com.airbnb.reair.incremental.primitives.CopyPartitionTask;
 import com.airbnb.reair.incremental.primitives.CopyPartitionedTableTask;
@@ -48,6 +49,8 @@ public class ReplicationServer implements TReplicationService.Iface {
   private static final Log LOG = LogFactory.getLog(ReplicationServer.class);
 
   private static final long POLL_WAIT_TIME_MS = 10 * 1000;
+  // how many audit log entries to process at once
+  private final int auditLogBatchSize;
 
   // If there is a need to wait to poll, wait this many ms
   private long pollWaitTimeMs = POLL_WAIT_TIME_MS;
@@ -185,6 +188,8 @@ public class ReplicationServer implements TReplicationService.Iface {
 
     this.jobExecutor = new ParallelJobExecutor("TaskWorker", numWorkers);
     this.copyPartitionJobExecutor = new ParallelJobExecutor("CopyPartitionWorker", numWorkers);
+    this.auditLogBatchSize = conf.getInt(
+        ConfigurationKeys.AUDIT_LOG_PROCESSING_BATCH_SIZE, 32);
 
     this.directoryCopier = directoryCopier;
 
@@ -198,6 +203,7 @@ public class ReplicationServer implements TReplicationService.Iface {
         objectConflictHandler,
         copyPartitionJobExecutor,
         directoryCopier);
+
 
     this.startAfterAuditLogId = startAfterAuditLogId;
 
@@ -381,6 +387,7 @@ public class ReplicationServer implements TReplicationService.Iface {
         ReplicationUtils.sleep(pollWaitTimeMs);
         continue;
       }
+      long batchSize = auditLogBatchSize;
 
       // Stop if we've had enough successful jobs - for testing purposes
       // only
@@ -395,7 +402,7 @@ public class ReplicationServer implements TReplicationService.Iface {
       }
 
       // Wait if there are too many jobs
-      if (jobExecutor.getNotDoneJobCount() > maxJobsInMemory) {
+      if (jobExecutor.getNotDoneJobCount() >= maxJobsInMemory) {
         LOG.debug(String.format(
             "There are too many jobs in memory. " + "Waiting until more complete. (limit: %d)",
             maxJobsInMemory));
@@ -403,56 +410,70 @@ public class ReplicationServer implements TReplicationService.Iface {
         continue;
       }
 
-      // Get an entry from the audit log
+      // make sure not to exceed maxJobsInMemory
+      batchSize = Math.min(batchSize, maxJobsInMemory - jobExecutor.getNotDoneJobCount());
+
+      // Get a few entries from the audit log
       LOG.debug("Fetching the next entry from the audit log");
-      Optional<AuditLogEntry> auditLogEntry = auditLogReader.resilientNext();
+      List<AuditLogEntry> auditLogEntries = auditLogReader.resilientNext((int) batchSize);
+
+      LOG.debug(String.format("Got %d audit log entries", auditLogEntries.size()));
+      for (AuditLogEntry entry : auditLogEntries) {
+        LOG.debug("Got audit log entry: " + entry);
+      }
 
       // If there's nothing from the audit log, then wait for a little bit
       // and then try again.
-      if (!auditLogEntry.isPresent()) {
+      if (auditLogEntries.isEmpty()) {
         LOG.debug(String.format("No more entries from the audit log. " + "Sleeping for %s ms",
             pollWaitTimeMs));
         ReplicationUtils.sleep(pollWaitTimeMs);
         continue;
       }
 
-      AuditLogEntry entry = auditLogEntry.get();
-
-      LOG.debug("Got audit log entry: " + entry);
-
       // Convert the audit log entry into a replication job, which has
       // elements persisted to the DB
-      List<ReplicationJob> replicationJobs =
-          jobFactory.createReplicationJobs(auditLogEntry.get(), replicationFilters);
-
-      LOG.debug(
-          String.format("Audit log entry id: %s converted to %s", entry.getId(), replicationJobs));
-
-      // Add these jobs to the registry
-      for (ReplicationJob job : replicationJobs) {
-        jobRegistry.registerJob(job);
+      List<List<ReplicationJob>> replicationJobsJobs =
+          jobFactory.createReplicationJobs(auditLogEntries, replicationFilters);
+      int replicationJobsJobsSize = 0;
+      for (List<ReplicationJob> rj : replicationJobsJobs) {
+        replicationJobsJobsSize += rj.size();
       }
-
+      LOG.debug(String.format("Persisted %d replication jobs", replicationJobsJobsSize));
       // Since the replication job was created and persisted, we can
       // advance the last persisted ID. Update every 10s to reduce db
-      if (System.currentTimeMillis() - updateTimeForLastPersistedId > 10000) {
-        keyValueStore.resilientSet(LAST_PERSISTED_AUDIT_LOG_ID_KEY, Long.toString(entry.getId()));
-        updateTimeForLastPersistedId = System.currentTimeMillis();
-      }
 
-      for (ReplicationJob replicationJob : replicationJobs) {
-        LOG.debug("Scheduling: " + replicationJob);
-        prettyLogStart(replicationJob);
-        long tasksSubmittedForExecution =
-            counters.getCounter(ReplicationCounters.Type.EXECUTION_SUBMITTED_TASKS);
-
-        if (tasksSubmittedForExecution >= jobsToComplete) {
-          LOG.warn(String.format("Not submitting %s for execution "
-              + " due to the limit for the number of " + "jobs to execute", replicationJob));
-          continue;
-        } else {
-          queueJobForExecution(replicationJob);
+      for (int i = 0; i < auditLogEntries.size(); i++) {
+        List<ReplicationJob> replicationJobs = replicationJobsJobs.get(i);
+        AuditLogEntry auditLogEntry = auditLogEntries.get(i);
+        // Add these jobs to the registry
+        for (ReplicationJob job : replicationJobs) {
+          jobRegistry.registerJob(job);
         }
+
+        LOG.debug(String.format(
+            "Audit log entry id: %s converted to %s", auditLogEntry.getId(), replicationJobs));
+
+        for (ReplicationJob replicationJob : replicationJobs) {
+          LOG.debug("Scheduling: " + replicationJob);
+          prettyLogStart(replicationJob);
+          long tasksSubmittedForExecution =
+              counters.getCounter(ReplicationCounters.Type.EXECUTION_SUBMITTED_TASKS);
+
+          if (tasksSubmittedForExecution >= jobsToComplete) {
+            LOG.warn(String.format("Not submitting %s for execution "
+                + " due to the limit for the number of " + "jobs to execute", replicationJob));
+            continue;
+          } else {
+            queueJobForExecution(replicationJob);
+          }
+        }
+      }
+      if (System.currentTimeMillis() - updateTimeForLastPersistedId > 10000) {
+        keyValueStore.resilientSet(
+            LAST_PERSISTED_AUDIT_LOG_ID_KEY,
+            Long.toString(auditLogEntries.get(auditLogEntries.size() - 1).getId()));
+        updateTimeForLastPersistedId = System.currentTimeMillis();
       }
     }
   }

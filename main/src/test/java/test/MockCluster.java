@@ -12,6 +12,7 @@ public class MockCluster implements Cluster {
   private HiveMetastoreClient client;
   private Path fsRoot;
   private Path tmpDir;
+  private Boolean isHA = false;
 
   /**
    * Constructs a mock cluster with static values.
@@ -47,4 +48,8 @@ public class MockCluster implements Cluster {
   public String getName() {
     return name;
   }
+
+
+  @Override
+  public Boolean isHA() { return isHA; }
 }

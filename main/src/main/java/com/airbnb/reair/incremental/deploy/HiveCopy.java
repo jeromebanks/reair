@@ -121,12 +121,14 @@ public class HiveCopy {
     int srcMetastorePort = Integer.parseInt(conf.get("airbnb.hive.cluster.src.metastore.port"));
     Path srcHdfsRoot = new Path(conf.get("airbnb.hive.cluster.src.hdfs.root"));
     Path srcTmpDir = new Path(conf.get("airbnb.hive.cluster.src.hdfs.tmp.dir"));
+    Boolean srcHdfsIsHA = conf.getBoolean("airbnb.hive.cluster.src.hdfs.is_ha", true);
 
     String destName = conf.get("airbnb.hive.cluster.dest.name");
     String destMetastoreHost = conf.get("airbnb.hive.cluster.dest.metastore.host");
     int destMetastorePort = Integer.parseInt(conf.get("airbnb.hive.cluster.dest.metastore.port"));
     Path destHdfsRoot = new Path(conf.get("airbnb.hive.cluster.dest.hdfs.root"));
     Path destTmpDir = new Path(conf.get("airbnb.hive.cluster.dest.hdfs.tmp.dir"));
+    Boolean destHdfsIsHA = conf.getBoolean("airbnb.hive.cluster.dest.hdfs.is_ha", true);
 
     HiveObjectSpec spec = new HiveObjectSpec(dbName, tableName, partitionName);
 
@@ -146,10 +148,10 @@ public class HiveCopy {
     LOG.info("spec=" + spec);
 
     HardCodedCluster srcCluster = new HardCodedCluster(srcName, srcMetastoreHost, srcMetastorePort,
-        null, null, srcHdfsRoot, srcTmpDir);
+        null, null, srcHdfsRoot, srcTmpDir, srcHdfsIsHA);
 
     HardCodedCluster destCluster = new HardCodedCluster(destName, destMetastoreHost,
-        destMetastorePort, null, null, destHdfsRoot, destTmpDir);
+        destMetastorePort, null, null, destHdfsRoot, destTmpDir, destHdfsIsHA);
 
     DirectoryCopier directoryCopier = new DirectoryCopier(conf, destTmpDir, true);
 

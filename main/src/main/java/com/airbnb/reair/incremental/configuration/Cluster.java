@@ -17,4 +17,6 @@ public interface Cluster {
   Path getTmpDir();
 
   String getName();
+
+  Boolean isHA();
 }

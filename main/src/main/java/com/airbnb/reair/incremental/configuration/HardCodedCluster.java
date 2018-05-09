@@ -18,6 +18,7 @@ public class HardCodedCluster implements Cluster {
   private Path hdfsRoot;
   private Path tmpDir;
   private ThreadLocal<ThriftHiveMetastoreClient> metastoreClient;
+  private Boolean _isHA = true;
 
   /**
    * Constructor with specific values.
@@ -37,7 +38,8 @@ public class HardCodedCluster implements Cluster {
       String jobtrackerHost,
       String jobtrackerPort,
       Path hdfsRoot,
-      Path tmpDir) {
+      Path tmpDir,
+      Boolean isHA) {
     this.name = name;
     this.metastoreHost = metastoreHost;
     this.metastorePort = metastorePort;
@@ -46,6 +48,7 @@ public class HardCodedCluster implements Cluster {
     this.hdfsRoot = hdfsRoot;
     this.tmpDir = tmpDir;
     this.metastoreClient = new ThreadLocal<ThriftHiveMetastoreClient>();
+    this._isHA = isHA;
   }
 
   public String getMetastoreHost() {
@@ -79,4 +82,7 @@ public class HardCodedCluster implements Cluster {
   public String getName() {
     return name;
   }
+
+  public Boolean isHA() { return _isHA; }
+
 }

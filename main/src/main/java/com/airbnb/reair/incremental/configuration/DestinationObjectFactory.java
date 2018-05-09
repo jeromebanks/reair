@@ -63,14 +63,18 @@ public class DestinationObjectFactory implements Configurable {
     // If the source path is within the FS root of the source cluster,
     // it should have the same relative path on the destination
     Path destPath;
-    String srcFsRootWithSlash = FsUtils.getPathWithSlash(srcCluster.getFsRoot().toString());
-    if (srcPath.toString().startsWith(srcFsRootWithSlash)) {
-      String relativePath = FsUtils.getRelativePath(srcCluster.getFsRoot(), srcPath);
-      destPath = new Path(destCluster.getFsRoot(), relativePath);
+    if( destCluster.isHA() ) {
+      destPath = new Path("hdfs://nameservice1/");
     } else {
-      LOG.warn("srcPath " + srcPath.toString() + " doesn't start with "
-          + srcFsRootWithSlash);
-      destPath = new Path(destCluster.getFsRoot(), srcPath.toUri().getPath());
+      String srcFsRootWithSlash = FsUtils.getPathWithSlash(srcCluster.getFsRoot().toString());
+      if (srcPath.toString().startsWith(srcFsRootWithSlash)) {
+        String relativePath = FsUtils.getRelativePath(srcCluster.getFsRoot(), srcPath);
+        destPath = new Path(destCluster.getFsRoot(), relativePath);
+      } else {
+        LOG.warn("srcPath " + srcPath.toString() + " doesn't start with "
+                + srcFsRootWithSlash);
+        destPath = new Path(destCluster.getFsRoot(), srcPath.toUri().getPath());
+      }
     }
 
     return destPath.toString();

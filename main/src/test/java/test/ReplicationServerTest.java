@@ -11,12 +11,9 @@ import com.airbnb.reair.db.DbKeyValueStore;
 import com.airbnb.reair.db.EmbeddedMySqlDb;
 import com.airbnb.reair.db.StaticDbConnectionFactory;
 import com.airbnb.reair.db.TestDbCredentials;
-import com.airbnb.reair.hive.hooks.AuditCoreLogModule;
 import com.airbnb.reair.hive.hooks.AuditLogHookUtils;
 import com.airbnb.reair.hive.hooks.CliAuditLogHook;
 import com.airbnb.reair.hive.hooks.HiveOperation;
-import com.airbnb.reair.hive.hooks.MetastoreAuditLogListener;
-import com.airbnb.reair.hive.hooks.ObjectLogModule;
 import com.airbnb.reair.incremental.DirectoryCopier;
 import com.airbnb.reair.incremental.ReplicationServer;
 import com.airbnb.reair.incremental.auditlog.AuditLogReader;
@@ -697,7 +694,7 @@ public class ReplicationServerTest extends MockClusterTest {
         Arrays.asList(replicationFilter),
         new DirectoryCopier(conf, srcCluster.getTmpDir(), false),
         1,
-        1,
+        2,
         Optional.of(0L));
     replicationServer.setPollWaitTimeMs(TEST_POLL_TIME);
     return replicationServer;
@@ -729,7 +726,7 @@ public class ReplicationServerTest extends MockClusterTest {
     replicationServer.run(1);
 
     // Verify that the object was copied
-    //assertTrue(destMetastore.existsTable(dbName, firstTableName));
+    assertTrue(destMetastore.existsTable(dbName, firstTableName));
 
     assertFalse(destMetastore.existsTable(dbName, secondTableName));
 

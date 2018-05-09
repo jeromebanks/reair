@@ -4,7 +4,6 @@ import com.airbnb.reair.db.DbConnectionFactory;
 import com.airbnb.reair.db.DbConnectionWatchdog;
 import com.airbnb.reair.db.DbKeyValueStore;
 import com.airbnb.reair.db.StaticDbConnectionFactory;
-import com.airbnb.reair.incremental.DirectoryCopier;
 import com.airbnb.reair.incremental.ReplicationServer;
 import com.airbnb.reair.incremental.StateUpdateException;
 import com.airbnb.reair.incremental.auditlog.AuditLogEntryException;
