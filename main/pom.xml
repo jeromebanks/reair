@@ -4,13 +4,13 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.airbnb</groupId>
     <artifactId>airbnb-reair-main</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1-JDB</version>
     <name>Airbnb ReAir Main</name>
     <packaging>jar</packaging>
     <parent>
       <groupId>com.airbnb</groupId>
       <artifactId>airbnb-reair-parent</artifactId>
-      <version>1.0.0</version>
+      <version>1.0.1-JDB</version>
     </parent>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -40,13 +40,13 @@
         <dependency>
             <artifactId>airbnb-reair-hive-hooks</artifactId>
             <groupId>com.airbnb</groupId>
-	    <version>1.0.0</version>
+	    <version>1.0.1-JDB</version>
         </dependency>
 
         <dependency>
             <artifactId>airbnb-reair-thrift</artifactId>
             <groupId>com.airbnb</groupId>
-            <version>1.0.0</version>
+            <version>1.0.1-JDB</version>
         </dependency>
 
         <dependency>

@@ -5,12 +5,12 @@
     <parent>
         <artifactId>airbnb-reair-parent</artifactId>
         <groupId>com.airbnb</groupId>
-        <version>1.0.0</version>
+        <version>1.0.1-JDB</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.airbnb</groupId>
-    <version>1.0.0</version>
+    <version>1.0.1-JDB</version>
     <artifactId>airbnb-reair-utils</artifactId>
 
     <name>Airbnb ReAir Utils</name>
