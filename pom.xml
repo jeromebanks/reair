@@ -56,4 +56,11 @@
         </pluginManagement>
     </build>
 
+  <repositories>
+    <repository>
+      <id>Maven Central</id>
+      <url>http://central.maven.org/maven2/</url>
+    </repository>
+  </repositories>
+
 </project>
